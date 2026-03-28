@@ -1,0 +1,77 @@
+:root {
+  --page-font: "Trebuchet MS", "Segoe UI", sans-serif;
+  --ink: #0f172a;
+  --muted: #475569;
+  --panel: #ffffff;
+  --line: #d6dbe4;
+  --focus: #0f766e;
+  --shadow-soft: 0 10px 26px -18px rgba(15, 23, 42, 0.45);
+}
+
+body {
+  font-family: var(--page-font);
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: 0.01em;
+}
+
+h1 {
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+}
+
+h2 {
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+}
+
+table th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+a,
+button,
+input,
+textarea,
+select {
+  transition: all 140ms ease;
+}
+
+a:hover {
+  color: #0f766e;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, white);
+  outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--focus) 45%, var(--line));
+}
+
+.rounded-xl.border,
+.rounded-lg.border {
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

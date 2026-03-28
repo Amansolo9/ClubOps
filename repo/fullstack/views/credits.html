@@ -1,0 +1,32 @@
+<section class="grid md:grid-cols-2 gap-6">
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Create Rule Version (Admin)</h2>
+    <form class="grid gap-2" hx-post="/api/credit_rules" hx-target="#rule-result">
+      <input name="version" class="border rounded px-2 py-1" placeholder="v2026.03" required />
+      <input name="weight" class="border rounded px-2 py-1" placeholder="1.0" required />
+      <input name="makeup_bonus" class="border rounded px-2 py-1" placeholder="2.0" required />
+      <input name="retake_factor" class="border rounded px-2 py-1" placeholder="0.9" required />
+      <textarea name="thresholds_json" class="border rounded px-2 py-1" placeholder='[{"min_score":90,"bonus":3}]'></textarea>
+      <textarea name="deductions_json" class="border rounded px-2 py-1" placeholder='[{"max_score":50,"amount":2}]'></textarea>
+      <input name="effective_from" class="border rounded px-2 py-1" placeholder="2026-01-01" required />
+      <input name="effective_to" class="border rounded px-2 py-1" placeholder="2026-12-31 (optional)" />
+      <label><input type="checkbox" name="makeup_enabled" value="true" checked /> makeup enabled</label>
+      <label><input type="checkbox" name="retake_enabled" value="true" checked /> retake enabled</label>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Create Active Rule</button>
+    </form>
+    <div id="rule-result" class="text-sm mt-2"></div>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Issue Credit (Immutable)</h2>
+    <form class="grid gap-2" hx-post="/api/credits/issue" hx-target="#issue-result" hx-swap="innerHTML">
+      <input name="member_id" class="border rounded px-2 py-1" placeholder="Member ID" required />
+      <input name="base_score" class="border rounded px-2 py-1" placeholder="80" required />
+      <input name="txn_date" class="border rounded px-2 py-1" placeholder="2026-03-26" />
+      <label><input type="checkbox" name="makeup" value="true" /> makeup used</label>
+      <label><input type="checkbox" name="retake" value="true" /> retake used</label>
+      <button class="bg-emerald-700 text-white rounded px-3 py-2">Issue</button>
+    </form>
+    <div id="issue-result" class="text-sm mt-2 text-slate-700"></div>
+  </div>
+</section>

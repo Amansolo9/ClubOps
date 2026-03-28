@@ -1,0 +1,23 @@
+<section class="space-y-6">
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Feature Flags</h2>
+    <form class="grid gap-2" hx-post="/api/flags" hx-target="#flag-result">
+      <input name="flag_key" class="border rounded px-2 py-1" placeholder="new_moderation_flow" required />
+      <input name="target_scope" class="border rounded px-2 py-1" value="global" placeholder="global | role:organizer | club:1" />
+      <input name="rollout_pct" class="border rounded px-2 py-1" value="100" />
+      <select name="enabled" class="border rounded px-2 py-1"><option value="false">false</option><option value="true">true</option></select>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Upsert Flag</button>
+    </form>
+    <div id="flag-result" class="text-sm mt-2"></div>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4">
+    <ul class="text-sm space-y-2">
+      {{range .Flags}}
+      <li class="border rounded p-2">{{.FlagKey}} => {{.Enabled}} ({{.TargetScope}}, {{.RolloutPct}}%)</li>
+      {{else}}
+      <li>No flags yet.</li>
+      {{end}}
+    </ul>
+  </div>
+</section>

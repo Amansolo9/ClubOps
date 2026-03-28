@@ -1,0 +1,50 @@
+<section class="space-y-6">
+  {{if and .User (eq .User.Role "admin")}}
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Create Club</h2>
+    <form class="grid gap-3" hx-post="/api/clubs" hx-target="#club-create-result">
+      <input name="name" class="border rounded px-2 py-1" placeholder="Club name" required />
+      <input name="tags" class="border rounded px-2 py-1" placeholder="sports,community" />
+      <input name="description" class="border rounded px-2 py-1" placeholder="Description" />
+      <label><input type="checkbox" name="recruitment_open" value="true" checked /> recruitment open</label>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Create Club</button>
+    </form>
+    <div id="club-create-result" class="text-sm mt-2"></div>
+  </div>
+  {{if .Clubs}}
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Club Directory</h2>
+    <div class="grid gap-2 sm:grid-cols-2">
+      {{range .Clubs}}
+      <a class="border rounded-lg px-3 py-2 hover:bg-slate-50" href="/clubs?club_id={{.ID}}">
+        <div class="font-medium">{{.Name}}</div>
+        <div class="text-xs text-slate-600">ID {{.ID}}</div>
+      </a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+  {{end}}
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Club Profile{{if .Club}} - {{.Club.Name}}{{end}}</h2>
+    {{if .Club}}
+    <form class="grid gap-3" hx-post="/api/clubs/{{.Club.ID}}/profile" hx-encoding="multipart/form-data" hx-target="#club-result">
+      <input name="name" class="border rounded px-2 py-1" value="{{.Club.Name}}" required />
+      <input name="tags" class="border rounded px-2 py-1" value="{{.Club.TagsRaw}}" placeholder="sports,community" />
+      <input type="hidden" name="avatar_path" value="{{.Club.AvatarPath}}" />
+      <div class="grid gap-2 md:grid-cols-[96px,1fr] md:items-center">
+        {{if .Club.AvatarPath}}
+        <img src="{{.Club.AvatarPath}}" alt="Club avatar" class="h-24 w-24 rounded-xl object-cover border" />
+        {{else}}
+        <div class="h-24 w-24 rounded-xl border bg-slate-100 flex items-center justify-center text-sm text-slate-500">No avatar</div>
+        {{end}}
+        <input type="file" name="avatar" accept=".jpg,.jpeg,.png" class="border rounded px-2 py-1" />
+      </div>
+      <input name="description" class="border rounded px-2 py-1" value="{{.Club.Description}}" />
+      <label><input type="checkbox" name="recruitment_open" value="true" {{if .Club.RecruitmentOpen}}checked{{end}} /> recruitment open</label>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Save Profile</button>
+    </form>
+    {{end}}
+    <div id="club-result" class="text-sm mt-2"></div>
+  </div>
+</section>

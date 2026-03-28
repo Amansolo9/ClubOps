@@ -1,0 +1,37 @@
+<section class="space-y-6">
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">User Administration</h2>
+    <p class="text-sm text-slate-600">Assign operational roles, club scope, and use admin reset from the API for temporary credentials.</p>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead><tr class="text-left"><th>User</th><th>Role</th><th>Club</th><th>Password State</th><th>Action</th></tr></thead>
+      <tbody>
+        {{range .Users}}
+        <tr class="border-t">
+          <td>{{.Username}}</td>
+          <td>
+            <form class="flex flex-wrap gap-2 items-center" hx-post="/api/users/{{.ID}}" hx-target="#user-result-{{.ID}}">
+              <select name="role" class="border rounded px-2 py-1">
+                <option value="member" {{if eq .Role "member"}}selected{{end}}>member</option>
+                <option value="team_lead" {{if eq .Role "team_lead"}}selected{{end}}>team_lead</option>
+                <option value="organizer" {{if eq .Role "organizer"}}selected{{end}}>organizer</option>
+                <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
+              </select>
+          </td>
+          <td><input name="club_id" class="border rounded px-2 py-1 w-24" value="{{if ne .ClubLabel "unassigned"}}{{.ClubLabel}}{{end}}" placeholder="club" /></td>
+          <td>{{if .MustChangePass}}reset required{{else}}active{{end}}</td>
+          <td>
+              <button class="bg-slate-900 text-white rounded px-3 py-1">Save</button>
+            </form>
+            <div id="user-result-{{.ID}}" class="text-xs text-slate-600 mt-1"></div>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5">No users found.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>

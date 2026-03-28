@@ -1,0 +1,23 @@
+<section class="space-y-6">
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Submit Review</h2>
+    <form class="grid gap-2" hx-post="/api/reviews" hx-encoding="multipart/form-data" hx-target="#review-result" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()">
+      <input name="fulfilled_order_id" class="border rounded px-2 py-1" placeholder="Fulfilled Order ID" required />
+      <select name="stars" class="border rounded px-2 py-1"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select>
+      <input name="tags" class="border rounded px-2 py-1" placeholder="communication,attendance" />
+      <textarea name="comment" class="border rounded px-2 py-1" placeholder="comment"></textarea>
+      <input type="file" name="images" multiple accept=".jpg,.jpeg,.png" class="border rounded px-2 py-1" />
+      <p class="text-xs text-slate-500">Reviews are tied to a fulfilled service/order record for auditability.</p>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Submit</button>
+    </form>
+    <div id="review-result" class="text-sm mt-2 text-slate-700"></div>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Recent Reviews</h2>
+    <div id="reviews-list"
+         hx-get="/partials/reviews/list"
+         hx-trigger="load, reviewsUpdated from:body"
+         hx-swap="innerHTML">Loading...</div>
+  </div>
+</section>

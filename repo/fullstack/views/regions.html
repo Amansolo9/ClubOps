@@ -1,0 +1,48 @@
+<section class="grid gap-6 lg:grid-cols-[320px,1fr]">
+  <div class="bg-white rounded-xl border p-4 space-y-3">
+    <h2 class="font-semibold">Region Versions</h2>
+    <form class="grid gap-2" hx-encoding="multipart/form-data" hx-post="/api/regions/import" hx-target="#region-import-result">
+      <input name="version_label" class="border rounded px-2 py-1" placeholder="spring-2026" required />
+      <input type="file" name="file" class="border rounded px-2 py-1" required />
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Import CSV</button>
+      <div id="region-import-result" class="text-xs text-slate-600"></div>
+    </form>
+    <ul class="space-y-2 text-sm">
+      {{range .Versions}}
+      <li class="rounded-lg border p-3">
+        <div class="font-medium">{{.Label}}</div>
+        <div class="text-xs text-slate-500">Version #{{.ID}}</div>
+      </li>
+      {{else}}
+      <li class="text-slate-500">No region versions yet.</li>
+      {{end}}
+    </ul>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4 space-y-4">
+    <h2 class="font-semibold">Create Region Snapshot Revision</h2>
+    {{if .Selected}}
+    <form class="grid gap-3" hx-post="/api/regions/{{.Selected.Version.ID}}" hx-target="#region-result">
+      <input name="version_label" class="border rounded px-2 py-1" value="{{.Selected.Version.Label}}" required />
+      <textarea name="rows_csv" class="min-h-64 border rounded px-2 py-1 font-mono text-sm" placeholder="State,County,City">{{.Selected.CSVRows}}</textarea>
+      <p class="text-xs text-slate-500">One row per line using `state,county,city`.</p>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Create New Version</button>
+    </form>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left"><th>State</th><th>County</th><th>City</th></tr></thead>
+        <tbody>
+          {{range .Selected.Rows}}
+          <tr class="border-t"><td>{{.State}}</td><td>{{.County}}</td><td>{{.City}}</td></tr>
+          {{else}}
+          <tr><td colspan="3" class="text-slate-500">No hierarchy rows.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="text-slate-500">Import a region CSV first to create an editable version.</p>
+    {{end}}
+    <div id="region-result" class="text-sm"></div>
+  </div>
+</section>

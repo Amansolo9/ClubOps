@@ -1,0 +1,33 @@
+<section class="space-y-4">
+  <h1 class="text-2xl font-bold">Open Recruitment</h1>
+  <form method="get" action="/clubs/recruiting" class="max-w-lg">
+    <input name="q" value="{{.Query}}" class="w-full border rounded px-3 py-2" placeholder="Search by club name or tags" />
+  </form>
+  <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    {{range .Clubs}}
+    <li class="bg-white border rounded-xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center gap-3">
+        {{if .AvatarPath}}
+        <img src="{{.AvatarPath}}" alt="{{.Name}} avatar" class="h-14 w-14 rounded-full object-cover border" />
+        {{else}}
+        <div class="h-14 w-14 rounded-full border bg-emerald-100 text-emerald-800 flex items-center justify-center font-semibold">CL</div>
+        {{end}}
+        <div>
+          <div class="font-semibold">{{.Name}}</div>
+          <div class="text-xs uppercase tracking-[0.2em] text-emerald-700">Recruiting Open</div>
+        </div>
+      </div>
+      <div class="text-sm text-slate-700">{{.Description}}</div>
+      <div class="flex flex-wrap gap-2">
+        {{range .Tags}}
+        <span class="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{{.}}</span>
+        {{else}}
+        <span class="text-xs text-slate-500">No tags provided</span>
+        {{end}}
+      </div>
+    </li>
+    {{else}}
+    <li class="text-slate-600">No clubs currently recruiting.</li>
+    {{end}}
+  </ul>
+</section>

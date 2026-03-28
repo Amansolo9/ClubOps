@@ -1,0 +1,96 @@
+<section class="space-y-6">
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Create Member</h2>
+    <form class="grid gap-2" hx-post="/api/members" hx-target="#member-result">
+      <input name="full_name" class="border rounded px-2 py-1" placeholder="Full name" required />
+      <input name="email" class="border rounded px-2 py-1" placeholder="email@example.com" required />
+      <input name="phone" class="border rounded px-2 py-1" placeholder="+1-555-111-2222" required />
+      <input name="join_date" class="border rounded px-2 py-1" placeholder="2026-03-26" />
+      <input name="position_title" class="border rounded px-2 py-1" placeholder="Coach" />
+      <select name="is_active" class="border rounded px-2 py-1"><option value="true">active</option><option value="false">inactive</option></select>
+      <input name="group_name" class="border rounded px-2 py-1" placeholder="Group" />
+      <textarea name="custom_fields" class="border rounded px-2 py-1" placeholder='{"membership":"gold"}'></textarea>
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Create</button>
+    </form>
+    <div id="member-result" class="text-sm mt-2"></div>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4">
+    <h2 class="font-semibold mb-3">Directory</h2>
+    <div class="mb-4 grid gap-3 md:grid-cols-2">
+      <form class="grid gap-2" hx-encoding="multipart/form-data" hx-post="/api/members/import" hx-target="#member-import-result">
+        <label class="text-sm font-medium">Import Members CSV</label>
+        <input type="file" name="file" class="border rounded px-2 py-1" required />
+        <button class="bg-slate-900 text-white rounded px-3 py-2">Import</button>
+        <div id="member-import-result" class="text-sm text-slate-700"></div>
+      </form>
+      <div class="grid gap-2 content-start">
+        <label class="text-sm font-medium">Export Members CSV</label>
+        <form method="get" action="/api/members/export" class="grid gap-2">
+          {{if and .User (eq .User.Role "admin")}}
+          <select name="club_id" class="border rounded px-2 py-1">
+            <option value="all" {{if eq .SelectedClub "all"}}selected{{end}}>All clubs</option>
+            {{range .Clubs}}
+            <option value="{{.ID}}" {{if eq $.SelectedClub (printf "%d" .ID)}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+          </select>
+          {{end}}
+          <input name="search" class="border rounded px-2 py-1" placeholder="Search by name" />
+          <input name="group" class="border rounded px-2 py-1" placeholder="Group filter" />
+          <select name="sort" class="border rounded px-2 py-1">
+            <option value="created_at">Newest</option>
+            <option value="full_name">Name</option>
+            <option value="join_date">Join Date</option>
+            <option value="position_title">Position</option>
+            <option value="is_active">Status</option>
+          </select>
+          <button class="inline-flex items-center justify-center rounded bg-emerald-700 px-3 py-2 text-white">Download Export</button>
+        </form>
+      </div>
+    </div>
+    <form method="get" class="grid grid-cols-3 gap-2 mb-3">
+      {{if and .User (eq .User.Role "admin")}}
+      <select name="club_id" class="border rounded px-2 py-1">
+        <option value="all" {{if eq .SelectedClub "all"}}selected{{end}}>All clubs</option>
+        {{range .Clubs}}
+        <option value="{{.ID}}" {{if eq $.SelectedClub (printf "%d" .ID)}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+      {{else}}
+      <input type="hidden" name="club_id" value="" />
+      {{end}}
+      <input name="search" class="border rounded px-2 py-1" placeholder="Search by name" />
+      <input name="group" class="border rounded px-2 py-1" placeholder="Group filter" />
+      <select name="sort" class="border rounded px-2 py-1"><option value="created_at">Newest</option><option value="full_name">Name</option><option value="join_date">Join Date</option><option value="position_title">Position</option><option value="is_active">Status</option></select>
+    </form>
+    <table class="w-full text-sm">
+      <thead><tr class="text-left"><th>Name</th><th>Position</th><th>Join Date</th><th>Status</th><th>Email</th><th>Phone</th><th>Group</th><th>Update</th></tr></thead>
+      <tbody>
+      {{range .Members}}
+      <tr class="border-t align-top">
+        <td>{{.FullName}}</td><td>{{.PositionTitle}}</td><td>{{.JoinDate}}</td><td>{{if .IsActive}}active{{else}}inactive{{end}}</td><td>{{.EmailEncrypted}}</td><td>{{.PhoneEncrypted}}</td><td>{{.GroupName}}</td>
+        <td>
+          <details>
+            <summary class="cursor-pointer text-emerald-700">Edit</summary>
+            <form class="mt-2 grid gap-2" hx-post="/api/members/{{.ID}}" hx-target="#member-edit-{{.ID}}">
+              <input name="full_name" class="border rounded px-2 py-1" value="{{.FullName}}" required />
+              <input name="email" class="border rounded px-2 py-1" value="{{.EmailEncrypted}}" required />
+              <input name="phone" class="border rounded px-2 py-1" value="{{.PhoneEncrypted}}" required />
+              <input name="join_date" class="border rounded px-2 py-1" value="{{.JoinDate}}" />
+              <input name="position_title" class="border rounded px-2 py-1" value="{{.PositionTitle}}" />
+              <select name="is_active" class="border rounded px-2 py-1"><option value="true" {{if .IsActive}}selected{{end}}>active</option><option value="false" {{if not .IsActive}}selected{{end}}>inactive</option></select>
+              <input name="group_name" class="border rounded px-2 py-1" value="{{.GroupName}}" />
+              <textarea name="custom_fields" class="border rounded px-2 py-1">{{.CustomFields}}</textarea>
+              <button class="bg-slate-900 text-white rounded px-3 py-2">Save</button>
+            </form>
+            <div id="member-edit-{{.ID}}" class="text-xs text-slate-600 mt-1"></div>
+          </details>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="8">No members yet.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>

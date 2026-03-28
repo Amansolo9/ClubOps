@@ -1,0 +1,25 @@
+<ul class="space-y-2 text-sm">
+  {{range .Changes}}
+  <li class="border rounded p-3 space-y-2">
+    <div class="font-medium">#{{.ID}} budget {{.BudgetID}} - {{printf "%.2f" .ChangePercent}}%</div>
+    <div class="text-slate-600">Proposed: {{printf "%.2f" .ProposedAmount}} by user {{.RequestedBy}}</div>
+    <div class="text-slate-600">Reason: {{.Reason}}</div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs uppercase tracking-[0.15em] text-slate-500">{{.Status}}</span>
+      {{if eq $.User.Role "admin"}}
+      <form class="flex gap-2" hx-post="/api/budget_change_requests/{{.ID}}/review" hx-target="#change-result-{{.ID}}">
+        <input type="hidden" name="decision" value="approve" />
+        <button class="rounded bg-emerald-700 px-3 py-1 text-white">Approve</button>
+      </form>
+      <form class="flex gap-2" hx-post="/api/budget_change_requests/{{.ID}}/review" hx-target="#change-result-{{.ID}}">
+        <input type="hidden" name="decision" value="reject" />
+        <button class="rounded bg-rose-700 px-3 py-1 text-white">Reject</button>
+      </form>
+      {{end}}
+    </div>
+    <div id="change-result-{{.ID}}" class="text-xs text-slate-600"></div>
+  </li>
+  {{else}}
+  <li>No pending approvals.</li>
+  {{end}}
+</ul>

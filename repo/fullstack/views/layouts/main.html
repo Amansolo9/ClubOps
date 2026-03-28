@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClubOps Portal</title>
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script src="/static/vendor/tailwindcss.js"></script>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body class="bg-slate-100 text-slate-900">
+  <div class="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-amber-50">
+    <header class="border-b border-slate-200 bg-white/80 backdrop-blur">
+      <div class="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
+        <a href="/" class="font-semibold text-lg">ClubOps Governance & Finance</a>
+        <nav class="flex gap-3 text-sm items-center">
+          <a class="hover:underline" href="/clubs/recruiting">Recruiting</a>
+          {{if .User}}
+            {{if ne .User.Role "member"}}<a class="hover:underline" href="/budgets">Budgets</a>{{end}}
+            <a class="hover:underline" href="/reviews">Reviews</a>
+            {{if ne .User.Role "member"}}<a class="hover:underline" href="/credits">Credit Engine</a>{{end}}
+            {{if ne .User.Role "member"}}<a class="hover:underline" href="/members">Members</a>{{end}}
+            {{if or (eq .User.Role "admin") (eq .User.Role "organizer") (eq .User.Role "team_lead")}}<a class="hover:underline" href="/clubs">Club Profile</a>{{end}}
+            {{if or (eq .User.Role "admin") (eq .User.Role "organizer")}}<a class="hover:underline" href="/regions">Regions</a>{{end}}
+            {{if or (eq .User.Role "admin") (eq .User.Role "organizer")}}<a class="hover:underline" href="/mdm">MDM</a>{{end}}
+            {{if eq .User.Role "admin"}}<a class="hover:underline" href="/users">Users</a>{{end}}
+            {{if eq .User.Role "admin"}}<a class="hover:underline" href="/flags">Feature Flags</a>{{end}}
+            <form method="post" action="/logout"><input type="hidden" name="csrf_token" data-csrf-field /><button class="text-red-700">Logout</button></form>
+          {{else}}
+            <a class="hover:underline" href="/login">Login</a>
+          {{end}}
+        </nav>
+      </div>
+    </header>
+    <main class="mx-auto max-w-6xl px-4 py-6">
+      {{embed}}
+    </main>
+  </div>
+  <script>
+    (function () {
+      function readCookie(name) {
+        const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-.$?*|{}()\[\]\\/+^]/g, '\\$&') + '=([^;]*)'));
+        return match ? decodeURIComponent(match[1]) : '';
+      }
+      function extractErrorMessage(raw) {
+        const text = (raw || '').trim();
+        if (!text) {
+          return 'Request failed. Please try again.';
+        }
+        if (text.startsWith('{') && text.endsWith('}')) {
+          try {
+            const payload = JSON.parse(text);
+            if (payload && typeof payload.message === 'string' && payload.message.trim()) {
+              return payload.message.trim();
+            }
+            if (payload && typeof payload.error === 'string' && payload.error.trim()) {
+              return payload.error.trim();
+            }
+          } catch (_) {}
+        }
+        return text;
+      }
+      function renderAlert(message, isError) {
+        const cls = isError
+          ? 'rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700'
+          : 'rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700';
+        return '<div class="' + cls + '">' + message + '</div>';
+      }
+      function applyCSRF() {
+        const token = readCookie('csrf_token');
+        document.querySelectorAll('[data-csrf-field]').forEach(function (input) {
+          input.value = token;
+        });
+      }
+      if (window.htmx && htmx.config && Array.isArray(htmx.config.responseHandling)) {
+        htmx.config.responseHandling = [
+          { code: '204', swap: false },
+          { code: '[23]..', swap: true },
+          { code: '[45]..', swap: true, error: false }
+        ];
+      }
+      applyCSRF();
+      document.body.addEventListener('htmx:configRequest', function (event) {
+        event.detail.headers['X-CSRF-Token'] = readCookie('csrf_token');
+      });
+      document.body.addEventListener('htmx:beforeSwap', function (event) {
+        if (!event.detail || !event.detail.isError) {
+          return;
+        }
+        const message = extractErrorMessage(event.detail.xhr && event.detail.xhr.responseText);
+        event.detail.shouldSwap = true;
+        event.detail.isError = false;
+        event.detail.serverResponse = renderAlert(message, true);
+      });
+    })();
+  </script>
+</body>
+</html>

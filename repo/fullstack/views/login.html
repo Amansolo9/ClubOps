@@ -1,0 +1,20 @@
+<section class="max-w-md mx-auto bg-white rounded-xl border p-6 space-y-4">
+  <h1 class="text-xl font-semibold">Sign In</h1>
+  {{if .Error}}<p class="text-red-700 text-sm">{{.Error}}</p>{{end}}
+  <form method="post" action="/login" class="space-y-3" hx-post="/login" hx-target="#login-result" hx-swap="innerHTML">
+    <input class="w-full border rounded px-3 py-2" type="text" name="username" placeholder="username" required />
+    <input class="w-full border rounded px-3 py-2" type="password" name="password" placeholder="password" required />
+    <button class="w-full rounded bg-emerald-700 text-white py-2">Login</button>
+  </form>
+  <div id="login-result" class="text-sm"></div>
+  <div class="border-t pt-4 space-y-3">
+    <h2 class="text-sm font-semibold text-slate-700">Quick Registration</h2>
+    <form method="post" action="/register" class="space-y-3" hx-post="/register" hx-target="#register-result">
+      <input class="w-full border rounded px-3 py-2" type="text" name="username" placeholder="new username" required />
+      <input class="w-full border rounded px-3 py-2" type="password" name="password" placeholder="minimum 12 characters" required />
+      <button class="w-full rounded bg-slate-900 text-white py-2">Register Member</button>
+    </form>
+    <div id="register-result" class="text-sm text-slate-700"></div>
+  </div>
+  <p class="text-xs text-slate-600">Local development account can be managed through seed defaults and the admin Users page.</p>
+</section>

@@ -1,0 +1,8 @@
+<section class="space-y-4">
+  <h1 class="text-2xl font-bold">Operations Dashboard</h1>
+  {{if .User}}
+  <p>Welcome back. Use the tabs to manage finance, moderation, and credits.</p>
+  {{else}}
+  <p><a class="text-blue-700 underline" href="/login">Sign in</a> to continue.</p>
+  {{end}}
+</section>

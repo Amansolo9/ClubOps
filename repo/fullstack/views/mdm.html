@@ -1,0 +1,44 @@
+<section class="grid gap-6 lg:grid-cols-2">
+  <div class="bg-white rounded-xl border p-4 space-y-4">
+    <h2 class="font-semibold">Dimension Imports</h2>
+    <form class="grid gap-2" hx-encoding="multipart/form-data" hx-post="/api/mdm/dimensions/import" hx-target="#dimension-result">
+      <select name="dimension_name" class="border rounded px-2 py-1">
+        <option value="product">product</option>
+        <option value="customer">customer</option>
+        <option value="channel">channel</option>
+        <option value="region">region</option>
+        <option value="time">time</option>
+      </select>
+      <input name="version_label" class="border rounded px-2 py-1" placeholder="v2026.03" required />
+      <input type="file" name="file" class="border rounded px-2 py-1" required />
+      <button class="bg-slate-900 text-white rounded px-3 py-2">Import Dimension CSV</button>
+    </form>
+    <div id="dimension-result" class="text-sm text-slate-700"></div>
+    <div class="space-y-2 text-sm">
+      {{range .MDM.Dimensions}}
+      <div class="rounded-lg border p-3">{{.DimensionName}} - {{.Label}} (#{{.ID}})</div>
+      {{else}}
+      <div class="text-slate-500">No dimension versions imported yet.</div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border p-4 space-y-4">
+    <h2 class="font-semibold">Sales Fact Imports</h2>
+    <form class="grid gap-2" hx-encoding="multipart/form-data" hx-post="/api/mdm/sales-facts/import" hx-target="#sales-result">
+      <input type="file" name="file" class="border rounded px-2 py-1" required />
+      <button class="bg-emerald-700 text-white rounded px-3 py-2">Import Sales Facts CSV</button>
+    </form>
+    <div id="sales-result" class="text-sm text-slate-700"></div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-left"><th>Product</th><th>Customer</th><th>Channel</th><th>Region</th><th>Time</th><th>Amount</th></tr></thead>
+      <tbody>
+        {{range .MDM.SalesFacts}}
+        <tr class="border-t"><td>{{.ProductCode}}</td><td>{{.CustomerCode}}</td><td>{{.ChannelCode}}</td><td>{{.RegionCode}}</td><td>{{.TimeCode}}</td><td>{{printf "%.2f" .Amount}}</td></tr>
+        {{else}}
+        <tr><td colspan="6">No sales facts imported yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>

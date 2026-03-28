@@ -1,0 +1,10 @@
+<table class="w-full text-sm">
+  <thead><tr class="text-left"><th>ID</th><th>Acct/Campus/Project</th><th>Period</th><th>Amount</th><th>Spent</th><th>Execution</th><th>Remaining</th><th>Alert</th></tr></thead>
+  <tbody>
+  {{range .Budgets}}
+  <tr class="border-t"><td>{{.ID}}</td><td>{{.AccountCode}} / {{.CampusCode}} / {{.ProjectCode}}</td><td>{{.PeriodType}} {{.PeriodStart}}</td><td>{{printf "%.2f" .Amount}}</td><td>{{printf "%.2f" .Spent}}</td><td>{{printf "%.1f%%" .ExecutionPct}}</td><td>{{printf "%.2f" .Remaining}}</td><td>{{if .ThresholdAlert}}85%+{{else}}-{{end}}</td></tr>
+  {{else}}
+  <tr><td colspan="8">No budgets yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>

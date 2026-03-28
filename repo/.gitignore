@@ -1,0 +1,12 @@
+*.db
+*.sqlite
+*.sqlite3
+
+fullstack/static/uploads/*
+!fullstack/static/uploads/.gitkeep
+
+fullstack/static/uploads/avatars/*
+!fullstack/static/uploads/avatars/.gitkeep
+
+sessions/
+.tmp/

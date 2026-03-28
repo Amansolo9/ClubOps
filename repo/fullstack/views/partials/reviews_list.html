@@ -1,0 +1,16 @@
+<ul class="space-y-2 text-sm">
+  {{range .Reviews}}
+  <li class="border rounded p-2 flex justify-between items-center gap-2">
+    <span>#{{.ID}} {{.Stars}}/5 - {{.AppealStatus}}</span>
+    <div class="flex gap-2">
+      <button hx-post="/api/reviews/{{.ID}}/appeal" hx-target="#review-result" class="text-amber-700">Appeal</button>
+      {{if or (eq $.User.Role "admin") (eq $.User.Role "organizer")}}
+        <button hx-post="/api/reviews/{{.ID}}/moderate" hx-vals='{"decision":"hide","reason":"policy violation"}' hx-target="#review-result" class="text-red-700">Hide</button>
+        <button hx-post="/api/reviews/{{.ID}}/moderate" hx-vals='{"decision":"reinstate","reason":"appeal approved"}' hx-target="#review-result" class="text-emerald-700">Reinstate</button>
+      {{end}}
+    </div>
+  </li>
+  {{else}}
+  <li>No reviews submitted.</li>
+  {{end}}
+</ul>
