@@ -5,7 +5,7 @@ Go (Fiber) + HTMX + SQLite implementation for multi-site membership governance, 
 ## One-click start
 
 ```bash
-docker compose -f fullstack/docker-compose.yml up --build
+docker compose up --build
 ```
 
 App URL: `http://localhost:8080`
@@ -18,7 +18,7 @@ Required env:
 
 Persistence:
 - SQLite DB in Docker volume: `sqlite_data`
-- Uploaded review images in: `./fullstack/static/uploads`
+- Uploaded review images in: `./static/uploads`
 
 ## Seeded account
 
@@ -44,14 +44,14 @@ Registration:
 Equivalent:
 
 ```bash
-go test ./fullstack/unit_tests/... -v
-go test ./fullstack/API_tests/... -v
+go test ./unit_tests/... -v
+go test ./API_tests/... -v
 ```
 
 Optional browser E2E (Playwright):
 
 ```bash
-cd fullstack/e2e
+cd e2e
 npm install
 npm run test:smoke
 E2E_ADMIN_USER=admin E2E_ADMIN_PASS=your-admin-password npm run test:auth
@@ -70,7 +70,7 @@ export APP_ENCRYPTION_KEY=local-dev-encryption-key-please-change
 export APP_DB_PATH=./fullstack.db
 export APP_BOOTSTRAP_ADMIN_PASSWORD=change-this-bootstrap-admin-pass
 export APP_PORT=8080
-go run ./fullstack/cmd
+go run ./cmd
 ```
 
 Windows PowerShell:
@@ -80,7 +80,7 @@ $env:APP_ENCRYPTION_KEY="local-dev-encryption-key-please-change"
 $env:APP_DB_PATH="./fullstack.db"
 $env:APP_BOOTSTRAP_ADMIN_PASSWORD="change-this-bootstrap-admin-pass"
 $env:APP_PORT="8080"
-go run ./fullstack/cmd
+go run ./cmd
 ```
 
 ## Security notes
@@ -115,6 +115,6 @@ go run ./fullstack/cmd
 - Region hierarchy management is available at `/regions` for admin/organizer users
 - Dimension and sales fact import workflows are available at `/mdm`
 - Admin user provisioning/role assignment is available at `/users`
-- Club avatars can be uploaded locally and are stored under `./fullstack/static/uploads/avatars`
+- Club avatars can be uploaded locally and are stored under `./static/uploads/avatars`
 - Budget spend updates can be recorded from `/budgets` to drive execution and alerting
 - Member CSV import returns an inline downloadable error-report link in the members UI when row validation fails

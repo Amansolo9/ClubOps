@@ -2,15 +2,15 @@
 *.sqlite
 *.sqlite3
 
-fullstack/static/uploads/*
-!fullstack/static/uploads/.gitkeep
+static/uploads/*
+!static/uploads/.gitkeep
 
-fullstack/static/uploads/avatars/*
-!fullstack/static/uploads/avatars/.gitkeep
+static/uploads/avatars/*
+!static/uploads/avatars/.gitkeep
 
 sessions/
 .tmp/
 
-fullstack/e2e/node_modules/
-fullstack/e2e/test-results/
-fullstack/e2e/playwright-report/
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
