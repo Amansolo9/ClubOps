@@ -3,7 +3,9 @@ package services
 import (
 	"errors"
 	"math"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"clubops_portal/internal/models"
@@ -22,8 +24,20 @@ func (s *FinanceService) CreateBudget(clubID int64, accountCode, campusCode, pro
 	if amount <= 0 {
 		return 0, errors.New("amount must be positive")
 	}
+	if strings.TrimSpace(accountCode) == "" {
+		return 0, errors.New("account_code required")
+	}
+	if strings.TrimSpace(campusCode) == "" {
+		return 0, errors.New("campus_code required")
+	}
+	if strings.TrimSpace(projectCode) == "" {
+		return 0, errors.New("project_code required")
+	}
 	if periodType != "monthly" && periodType != "quarterly" {
 		return 0, errors.New("period_type must be monthly or quarterly")
+	}
+	if err := validateBudgetPeriodStart(periodType, periodStart); err != nil {
+		return 0, err
 	}
 	return s.store.InsertBudget(models.Budget{
 		ClubID:      clubID,
@@ -37,6 +51,18 @@ func (s *FinanceService) CreateBudget(clubID int64, accountCode, campusCode, pro
 		CreatedBy:   userID,
 		Status:      "active",
 	})
+}
+
+func validateBudgetPeriodStart(periodType, periodStart string) error {
+	monthlyPattern := regexp.MustCompile(`^\d{4}-(0[1-9]|1[0-2])$`)
+	quarterlyPattern := regexp.MustCompile(`^\d{4}-Q[1-4]$`)
+	if periodType == "monthly" && !monthlyPattern.MatchString(periodStart) {
+		return errors.New("period_start must be YYYY-MM for monthly")
+	}
+	if periodType == "quarterly" && !quarterlyPattern.MatchString(periodStart) {
+		return errors.New("period_start must be YYYY-Q[1-4] for quarterly")
+	}
+	return nil
 }
 
 func (s *FinanceService) RequestBudgetChange(budgetID, requesterID int64, proposedAmount float64, reason string, requesterRole string, requesterClubID *int64) (int64, error) {
@@ -67,6 +93,9 @@ func (s *FinanceService) RequestBudgetChange(budgetID, requesterID int64, propos
 			return 0, err
 		}
 		return 0, nil
+	}
+	if requesterRole != "organizer" && requesterRole != "admin" {
+		return 0, errors.New("requester must be organizer or admin for >10% changes")
 	}
 	return s.store.InsertBudgetChangeRequest(models.BudgetChangeRequest{
 		BudgetID:       budgetID,
@@ -101,15 +130,33 @@ func (s *FinanceService) RecordSpend(budgetID int64, spent float64) error {
 	return s.store.UpdateBudgetThreshold(budgetID, alert)
 }
 
-func (s *FinanceService) ApproveChange(changeID, adminID int64, approve bool) error {
+func (s *FinanceService) ApproveChange(changeID, reviewerID int64, approve bool, reviewerRole string) error {
+	if reviewerRole != "admin" && reviewerRole != "organizer" {
+		return errors.New("reviewer must be admin or organizer")
+	}
 	requesterID, err := s.store.GetBudgetChangeRequester(changeID)
 	if err != nil {
 		return err
 	}
-	if requesterID == adminID {
+	if requesterID == reviewerID {
 		return errors.New("reviewer must differ from requester")
 	}
-	return s.store.ApproveBudgetChange(changeID, adminID, approve)
+	requester, err := s.store.FindUserByID(requesterID)
+	if err != nil {
+		return err
+	}
+	reviewer, err := s.store.FindUserByID(reviewerID)
+	if err != nil {
+		return err
+	}
+	// Cross-role: organizer request -> admin reviews; admin request -> organizer reviews
+	if requester.Role == "organizer" && reviewer.Role != "admin" {
+		return errors.New("organizer requests must be reviewed by admin")
+	}
+	if requester.Role == "admin" && reviewer.Role != "organizer" {
+		return errors.New("admin requests must be reviewed by organizer")
+	}
+	return s.store.ApproveBudgetChange(changeID, reviewerID, approve)
 }
 
 func (s *FinanceService) StartThresholdWorker(every time.Duration) {

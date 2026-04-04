@@ -80,7 +80,7 @@ func (h *Handler) reviewBudgetChange(c *fiber.Ctx) error {
 		return apiError(c, fiber.StatusBadRequest, "validation_error", "invalid change id")
 	}
 	approve := c.FormValue("decision") == "approve"
-	if err := h.finance.ApproveChange(changeID, user.ID, approve); err != nil {
+	if err := h.finance.ApproveChange(changeID, user.ID, approve, user.Role); err != nil {
 		return h.writeServiceError(c, err)
 	}
 	c.Set("HX-Trigger", `{"budgetsUpdated":true}`)

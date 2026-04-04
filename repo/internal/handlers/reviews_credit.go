@@ -240,7 +240,9 @@ func (h *Handler) issueCredit(c *fiber.Ctx) error {
 		return apiError(c, fiber.StatusForbidden, "forbidden", "credit engine feature disabled for your scope")
 	}
 	txnDate := c.FormValue("txn_date", time.Now().Format("2006-01-02"))
-	id, credit, err := h.credit.IssueCredit(memberID, base, c.FormValue("makeup") == "true", c.FormValue("retake") == "true", txnDate)
+	txnRef := c.FormValue("txn_ref")
+	source := c.FormValue("source")
+	id, credit, err := h.credit.IssueCredit(memberID, base, c.FormValue("makeup") == "true", c.FormValue("retake") == "true", txnDate, txnRef, source)
 	if err != nil {
 		return h.writeServiceError(c, err)
 	}

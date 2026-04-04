@@ -135,13 +135,16 @@ func (s *SQLiteStore) AutoMigrate() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			member_id INTEGER NOT NULL,
 			rule_version_id INTEGER NOT NULL,
+			txn_date TEXT NOT NULL,
+			txn_ref TEXT NOT NULL,
+			source TEXT NOT NULL,
 			base_score REAL NOT NULL,
 			makeup_used INTEGER NOT NULL DEFAULT 0,
 			retake_used INTEGER NOT NULL DEFAULT 0,
 			calculated_credit REAL NOT NULL,
 			immutable_hash TEXT NOT NULL,
 			issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(member_id, rule_version_id),
+			UNIQUE(member_id, txn_date, txn_ref, source),
 			FOREIGN KEY (rule_version_id) REFERENCES credit_rule_versions(id)
 		);`,
 		`CREATE TABLE IF NOT EXISTS reviews (
@@ -240,6 +243,9 @@ func (s *SQLiteStore) AutoMigrate() error {
 			return err
 		}
 	}
+	if err := s.ensureCreditIssuedSchema(); err != nil {
+		return err
+	}
 	triggerStmts := []string{
 		`DROP TRIGGER IF EXISTS trg_audit_logs_no_update;`,
 		`DROP TRIGGER IF EXISTS trg_audit_logs_no_early_delete;`,
@@ -261,5 +267,60 @@ func (s *SQLiteStore) AutoMigrate() error {
 		}
 	}
 	_, _ = s.DB.Exec(`UPDATE users SET password_set_at = CURRENT_TIMESTAMP WHERE password_set_at = '1970-01-01T00:00:00Z'`)
+	return nil
+}
+
+func (s *SQLiteStore) ensureCreditIssuedSchema() error {
+	hasTxnRef := false
+	rows, err := s.DB.Query(`PRAGMA table_info(credit_issued)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if strings.EqualFold(name, "txn_ref") {
+			hasTxnRef = true
+		}
+	}
+	if hasTxnRef {
+		return nil
+	}
+	if _, err := s.DB.Exec(`CREATE TABLE credit_issued_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		member_id INTEGER NOT NULL,
+		rule_version_id INTEGER NOT NULL,
+		txn_date TEXT NOT NULL,
+		txn_ref TEXT NOT NULL,
+		source TEXT NOT NULL,
+		base_score REAL NOT NULL,
+		makeup_used INTEGER NOT NULL DEFAULT 0,
+		retake_used INTEGER NOT NULL DEFAULT 0,
+		calculated_credit REAL NOT NULL,
+		immutable_hash TEXT NOT NULL,
+		issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(member_id, txn_date, txn_ref, source),
+		FOREIGN KEY (rule_version_id) REFERENCES credit_rule_versions(id)
+	)`); err != nil {
+		return err
+	}
+	if _, err := s.DB.Exec(`INSERT INTO credit_issued_new (id, member_id, rule_version_id, txn_date, txn_ref, source, base_score, makeup_used, retake_used, calculated_credit, immutable_hash, issued_at)
+		SELECT id, member_id, rule_version_id, COALESCE(substr(issued_at, 1, 10), '1970-01-01'), 'legacy-' || id, 'legacy', base_score, makeup_used, retake_used, calculated_credit, immutable_hash, issued_at
+		FROM credit_issued`); err != nil {
+		return err
+	}
+	if _, err := s.DB.Exec(`DROP TABLE credit_issued`); err != nil {
+		return err
+	}
+	if _, err := s.DB.Exec(`ALTER TABLE credit_issued_new RENAME TO credit_issued`); err != nil {
+		return err
+	}
 	return nil
 }

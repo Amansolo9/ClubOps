@@ -132,6 +132,9 @@ type CreditIssued struct {
 	ID               int64
 	MemberID         int64
 	RuleVersionID    int64
+	TxnDate          string
+	TxnRef           string
+	Source           string
 	BaseScore        float64
 	MakeupUsed       bool
 	RetakeUsed       bool

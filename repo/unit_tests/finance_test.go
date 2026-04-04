@@ -31,7 +31,7 @@ func TestBudgetApprovalWorkflowOverTenPercent(t *testing.T) {
 	if changeID == 0 {
 		t.Fatalf("expected approval request for >10%% change")
 	}
-	if err := finance.ApproveChange(changeID, 1, true); err != nil {
+	if err := finance.ApproveChange(changeID, 1, true, "admin"); err != nil {
 		t.Fatal(err)
 	}
 	b, err := st.GetBudgetByID(bID)
@@ -80,7 +80,7 @@ func TestBudgetChangeUnderTenPercentUpdatesDirectly(t *testing.T) {
 	}
 }
 
-func TestBudgetChangeOverTenPercentCreatesRequestForAdmin(t *testing.T) {
+func TestBudgetChangeOverTenPercentRejectsAdminRequester(t *testing.T) {
 	st := setupStore(t)
 	defer st.Close()
 	finance := services.NewFinanceService(st)
@@ -88,16 +88,12 @@ func TestBudgetChangeOverTenPercentCreatesRequestForAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changeID, err := finance.RequestBudgetChange(bID, 1, 1200, "too large", "admin", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if changeID == 0 {
-		t.Fatalf("expected >10%% admin change to create approval request")
+	if _, err := finance.RequestBudgetChange(bID, 1, 1200, "too large", "admin", nil); err == nil {
+		t.Fatalf("expected >10%% admin change to be rejected")
 	}
 }
 
-func TestBudgetChangeOverTenPercentCreatesRequestForTeamLead(t *testing.T) {
+func TestBudgetChangeOverTenPercentRejectsTeamLeadRequester(t *testing.T) {
 	st := setupStore(t)
 	defer st.Close()
 	finance := services.NewFinanceService(st)
@@ -114,12 +110,8 @@ func TestBudgetChangeOverTenPercentCreatesRequestForTeamLead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changeID, err := finance.RequestBudgetChange(bID, lead.ID, 1200, "too large", "team_lead", lead.ClubID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if changeID == 0 {
-		t.Fatalf("expected >10%% team lead change to create approval request")
+	if _, err := finance.RequestBudgetChange(bID, lead.ID, 1200, "too large", "team_lead", lead.ClubID); err == nil {
+		t.Fatalf("expected >10%% team lead change to be rejected")
 	}
 }
 
@@ -144,7 +136,7 @@ func TestBudgetChangeRejectionKeepsAmount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := finance.ApproveChange(changeID, 1, false); err != nil {
+	if err := finance.ApproveChange(changeID, 1, false, "admin"); err != nil {
 		t.Fatal(err)
 	}
 	b, err := st.GetBudgetByID(bID)
@@ -153,6 +145,40 @@ func TestBudgetChangeRejectionKeepsAmount(t *testing.T) {
 	}
 	if b.Amount != 1000 {
 		t.Fatalf("expected original amount to remain after rejection")
+	}
+}
+
+func TestBudgetChangeReviewRejectsNonAdminReviewerRole(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	finance := services.NewFinanceService(st)
+	auth := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	requesterHash, _ := auth.HashPassword("RequesterPass123!")
+	if err := st.CreateUser("organizer-requester", requesterHash, "organizer", int64Ptr(1)); err != nil {
+		t.Fatal(err)
+	}
+	reviewerHash, _ := auth.HashPassword("ReviewerPass123!")
+	if err := st.CreateUser("organizer-reviewer", reviewerHash, "organizer", int64Ptr(1)); err != nil {
+		t.Fatal(err)
+	}
+	requester, err := st.FindUserByUsername("organizer-requester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewer, err := st.FindUserByUsername("organizer-reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bID, err := finance.CreateBudget(1, "acct-1", "camp-1", "proj-1", "monthly", "2026-03", 1000, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeID, err := finance.RequestBudgetChange(bID, requester.ID, 1200, "expansion", "organizer", requester.ClubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := finance.ApproveChange(changeID, reviewer.ID, true, "organizer"); err == nil {
+		t.Fatalf("expected non-admin reviewer role rejection")
 	}
 }
 
@@ -196,5 +222,32 @@ func TestBudgetThresholdAlertToggle(t *testing.T) {
 	}
 	if workerAuditCount < 2 {
 		t.Fatalf("expected worker threshold updates to be audited")
+	}
+}
+
+func TestCreateBudgetRejectsInvalidMonthlyPeriodStart(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	finance := services.NewFinanceService(st)
+	if _, err := finance.CreateBudget(1, "acct-1", "camp-1", "proj-1", "monthly", "2026-13", 1000, 1); err == nil {
+		t.Fatalf("expected invalid monthly period_start rejection")
+	}
+}
+
+func TestCreateBudgetRejectsInvalidQuarterlyPeriodStart(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	finance := services.NewFinanceService(st)
+	if _, err := finance.CreateBudget(1, "acct-1", "camp-1", "proj-1", "quarterly", "2026-03", 1000, 1); err == nil {
+		t.Fatalf("expected invalid quarterly period_start rejection")
+	}
+}
+
+func TestCreateBudgetRejectsMissingCoreDimensionFields(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	finance := services.NewFinanceService(st)
+	if _, err := finance.CreateBudget(1, "", "camp-1", "proj-1", "monthly", "2026-03", 1000, 1); err == nil {
+		t.Fatalf("expected missing account_code rejection")
 	}
 }

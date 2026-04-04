@@ -62,13 +62,13 @@ func NewHandler(st *store.SQLiteStore, auth *services.AuthService, finance *serv
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Static("/static", "./static")
 
-	app.Get("/", h.dashboard)
 	app.Get("/clubs/recruiting", h.publicRecruiting)
 	app.Get("/login", h.loginPage)
 	app.Post("/login", h.loginAction)
 	app.Post("/register", h.register)
 
 	secured := app.Group("", middleware.RequireAuth())
+	secured.Get("/", h.dashboard)
 	secured.Post("/logout", h.logout)
 	secured.Get("/change-password", h.changePasswordPage)
 	secured.Get("/budgets", middleware.RequireAuth("admin", "organizer", "team_lead"), h.budgetsPage)
@@ -90,7 +90,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	api.Post("/auth/admin-reset", middleware.RequireAuth("admin"), h.adminResetPassword)
 	api.Post("/budgets", middleware.RequireAuth("admin", "organizer", "team_lead"), h.createBudget)
 	api.Post("/budgets/:id/change", middleware.RequireAuth("admin", "organizer", "team_lead"), h.requestBudgetChange)
-	api.Post("/budget_change_requests/:id/review", middleware.RequireAuth("admin"), h.reviewBudgetChange)
+	api.Post("/budget_change_requests/:id/review", middleware.RequireAuth("admin", "organizer"), h.reviewBudgetChange)
 	api.Get("/budgets/:id/projection", middleware.RequireAuth("admin", "organizer", "team_lead"), h.budgetProjection)
 	api.Post("/budgets/:id/spend", middleware.RequireAuth("admin", "organizer", "team_lead"), h.recordBudgetSpend)
 	api.Post("/reviews", middleware.RequireAuth("admin", "organizer", "team_lead", "member"), h.createReview)
@@ -112,5 +112,5 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	api.Post("/clubs/:id/profile", middleware.RequireAuth("admin", "organizer", "team_lead"), h.updateClubProfile)
 	api.Post("/users/:id", middleware.RequireAuth("admin"), h.updateUser)
 	api.Post("/flags", middleware.RequireAuth("admin"), h.upsertFlag)
-	api.Get("/flags/evaluate/:key", h.evaluateFlag)
+	api.Get("/flags/evaluate/:key", middleware.RequireAuth("admin"), h.evaluateFlag)
 }

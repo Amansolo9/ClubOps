@@ -102,6 +102,56 @@ func TestReviewUploadRejectsInvalidFileType(t *testing.T) {
 	}
 }
 
+func TestReviewUploadRejectsMismatchedImageContent(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	authSvc := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, err := authSvc.HashPassword("MemberPassword2!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("member-review-content", hash, "member", int64Ptr(1)); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.FindUserByUsername("member-review-content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	orderID, err := st.InsertFulfilledOrder(models.FulfilledOrder{ClubID: 1, SiteID: 112, MemberID: 223, OwnerUserID: member.ID, ServiceLabel: "Photo Review", Status: "fulfilled", FulfilledAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "member-review-content", "MemberPassword2!")
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	for key, value := range map[string]string{"fulfilled_order_id": strconv.FormatInt(orderID, 10), "stars": "5", "tags": "communication", "comment": "ok"} {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	part, err := writer.CreateFormFile("images", "proof.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("not-a-real-image")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/reviews", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 422 {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 422 invalid image content, got %d body=%s", resp.StatusCode, string(respBody))
+	}
+}
+
 func TestReviewCreationRequiresOrderOwnership(t *testing.T) {
 	app, st := setupApp(t)
 	defer st.Close()

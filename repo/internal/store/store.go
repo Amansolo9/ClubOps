@@ -62,8 +62,8 @@ func (s *SQLiteStore) GetCreditRuleForDate(txnDate string) (*models.CreditRuleVe
 }
 
 func (s *SQLiteStore) InsertIssuedCredit(c models.CreditIssued) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO credit_issued (member_id, rule_version_id, base_score, makeup_used, retake_used, calculated_credit, immutable_hash) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		c.MemberID, c.RuleVersionID, c.BaseScore, c.MakeupUsed, c.RetakeUsed, c.CalculatedCredit, c.ImmutableHash)
+	res, err := s.DB.Exec(`INSERT INTO credit_issued (member_id, rule_version_id, txn_date, txn_ref, source, base_score, makeup_used, retake_used, calculated_credit, immutable_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.MemberID, c.RuleVersionID, c.TxnDate, c.TxnRef, c.Source, c.BaseScore, c.MakeupUsed, c.RetakeUsed, c.CalculatedCredit, c.ImmutableHash)
 	if err != nil {
 		if err.Error() != "" {
 			return 0, err

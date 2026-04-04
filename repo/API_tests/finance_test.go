@@ -30,6 +30,9 @@ func TestLoginAndCreateBudget(t *testing.T) {
 	bform.Set("club_id", "1")
 	bform.Set("period_type", "monthly")
 	bform.Set("period_start", "2026-03")
+	bform.Set("account_code", "acct-1")
+	bform.Set("campus_code", "camp-1")
+	bform.Set("project_code", "proj-1")
 	bform.Set("amount", "2000")
 	breq := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader(bform.Encode()))
 	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -124,6 +127,9 @@ func TestOrganizerBudgetCreationForcesOwnClubScope(t *testing.T) {
 	form.Set("club_id", "2")
 	form.Set("period_type", "monthly")
 	form.Set("period_start", "2026-03")
+	form.Set("account_code", "acct-1")
+	form.Set("campus_code", "camp-1")
+	form.Set("project_code", "proj-1")
 	form.Set("amount", "1500")
 	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -160,6 +166,9 @@ func TestAuditLogInsertedForMutation(t *testing.T) {
 	bform := url.Values{}
 	bform.Set("period_type", "monthly")
 	bform.Set("period_start", "2026-03")
+	bform.Set("account_code", "acct-1")
+	bform.Set("campus_code", "camp-1")
+	bform.Set("project_code", "proj-1")
 	bform.Set("amount", "2000")
 	breq := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader(bform.Encode()))
 	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -402,5 +411,60 @@ func TestAdminBudgetsPageIncludesClubSelectorOnCreateForm(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 || !strings.Contains(string(body), "name=\"club_id\"") {
 		t.Fatalf("expected admin budgets page to include club selector, got %d body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestBudgetCreateRejectsInvalidPeriodStartFormat(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	adminHash, _ := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute).HashPassword("StrongAdmin123!")
+	if err := st.UpdatePassword(1, adminHash, false); err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "admin", "StrongAdmin123!")
+	form := url.Values{}
+	form.Set("club_id", "1")
+	form.Set("period_type", "monthly")
+	form.Set("period_start", "2026/03")
+	form.Set("account_code", "acct-1")
+	form.Set("campus_code", "camp-1")
+	form.Set("project_code", "proj-1")
+	form.Set("amount", "1000")
+	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 422 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 422 invalid period_start format, got %d body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestBudgetCreateRejectsMissingDimensionFields(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	adminHash, _ := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute).HashPassword("StrongAdmin123!")
+	if err := st.UpdatePassword(1, adminHash, false); err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "admin", "StrongAdmin123!")
+	form := url.Values{}
+	form.Set("club_id", "1")
+	form.Set("period_type", "monthly")
+	form.Set("period_start", "2026-03")
+	form.Set("amount", "1000")
+	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 422 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 422 missing dimension fields, got %d body=%s", resp.StatusCode, string(body))
 	}
 }

@@ -114,6 +114,36 @@ func TestMemberExportDeniedForMemberRole(t *testing.T) {
 	}
 }
 
+func TestMemberCreateRejectsMissingCoreFields(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	authSvc := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, err := authSvc.HashPassword("OrganizerPass123!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("org-member-required", hash, "organizer", int64Ptr(1)); err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "org-member-required", "OrganizerPass123!")
+	form := url.Values{}
+	form.Set("full_name", "")
+	form.Set("email", "")
+	form.Set("phone", "")
+	form.Set("join_date", "")
+	req := httptest.NewRequest(http.MethodPost, "/api/members", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 422 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 422 for missing core fields, got %d body=%s", resp.StatusCode, string(body))
+	}
+}
+
 func TestMemberImportRejectsInvalidCustomFields(t *testing.T) {
 	app, st := setupApp(t)
 	defer st.Close()
@@ -238,6 +268,44 @@ func TestMemberImportCSVSupportsExportShape(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].FullName != "Alex Doe" {
 		t.Fatalf("expected imported member from export-shaped csv")
+	}
+}
+
+func TestMemberImportRejectsUnexpectedHeaderContract(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	authSvc := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, err := authSvc.HashPassword("OrganizerPass123!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("org-bad-header", hash, "organizer", int64Ptr(1)); err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "org-bad-header", "OrganizerPass123!")
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "members.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = part.Write([]byte("email,full_name,phone,join_date,position_title,is_active,group_name,custom_fields\nalex@example.com,Alex Doe,123,2026-03-01,Captain,true,Alpha,{}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/members/import", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 422 {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 422 invalid header contract, got %d body=%s", resp.StatusCode, string(respBody))
 	}
 }
 

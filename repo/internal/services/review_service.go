@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -86,6 +88,9 @@ func (s *ReviewService) CreateReviewScoped(clubID, siteID, memberID, reviewerID 
 		if ext != ".jpg" && ext != ".jpeg" && ext != ".png" {
 			return 0, errors.New("invalid image type")
 		}
+		if err := validateImageSignature(fh); err != nil {
+			return 0, err
+		}
 		savedName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(fh.Filename))
 		target := filepath.Join(s.uploadDir, savedName)
 		if err := saveFileHeader(fh, target); err != nil {
@@ -136,4 +141,22 @@ func saveFileHeader(fh *multipart.FileHeader, target string) error {
 	defer out.Close()
 	_, err = out.ReadFrom(src)
 	return err
+}
+
+func validateImageSignature(fh *multipart.FileHeader) error {
+	src, err := fh.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	buf := make([]byte, 512)
+	n, err := src.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	contentType := http.DetectContentType(buf[:n])
+	if contentType != "image/jpeg" && contentType != "image/png" {
+		return errors.New("invalid image content")
+	}
+	return nil
 }

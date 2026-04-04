@@ -6,6 +6,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+const authFailureMessage = "invalid credentials"
+
 func (h *Handler) dashboard(c *fiber.Ctx) error {
 	return h.render(c, "index", fiber.Map{"User": currentUser(c)}, "layouts/main")
 }
@@ -31,9 +33,9 @@ func (h *Handler) loginAction(c *fiber.Ctx) error {
 	token, user, err := h.auth.Login(c.FormValue("username"), c.FormValue("password"))
 	if err != nil {
 		if c.Get("HX-Request") == "true" {
-			return c.Status(fiber.StatusUnauthorized).SendString(err.Error())
+			return c.Status(fiber.StatusUnauthorized).SendString(authFailureMessage)
 		}
-		return h.render(c.Status(fiber.StatusUnauthorized), "login", fiber.Map{"Error": err.Error()}, "layouts/main")
+		return h.render(c.Status(fiber.StatusUnauthorized), "login", fiber.Map{"Error": authFailureMessage}, "layouts/main")
 	}
 	c.Cookie(&fiber.Cookie{Name: "session_token", Value: token, HTTPOnly: true, Secure: c.Protocol() == "https", Path: "/", SameSite: "Lax"})
 	redirectPath := "/"

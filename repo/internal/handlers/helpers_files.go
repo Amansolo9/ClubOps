@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"errors"
+	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,6 +16,9 @@ func saveAvatarFile(fh *multipart.FileHeader) (string, error) {
 	ext := strings.ToLower(filepath.Ext(fh.Filename))
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" {
 		return "", errors.New("avatar must be jpg or png")
+	}
+	if err := validateUploadedImageSignature(fh); err != nil {
+		return "", err
 	}
 	if fh.Size > 2*1024*1024 {
 		return "", errors.New("avatar must be <= 2MB")
@@ -51,4 +56,22 @@ func saveMemberImportErrorReport(contents string) (string, error) {
 		return "", err
 	}
 	return "/static/uploads/reports/" + name, nil
+}
+
+func validateUploadedImageSignature(fh *multipart.FileHeader) error {
+	src, err := fh.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	buf := make([]byte, 512)
+	n, err := src.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	contentType := http.DetectContentType(buf[:n])
+	if contentType != "image/jpeg" && contentType != "image/png" {
+		return errors.New("avatar must be valid image content")
+	}
+	return nil
 }

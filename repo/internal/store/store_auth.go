@@ -79,8 +79,26 @@ func (s *SQLiteStore) CreateUser(username, passwordHash, role string, clubID *in
 }
 
 func (s *SQLiteStore) UpdatePassword(userID int64, hash string, mustChange bool) error {
-	_, err := s.DB.Exec(`UPDATE users SET password_hash = ?, password_set_at = ?, must_change_password = ? WHERE id = ?`, hash, time.Now(), mustChange, userID)
-	return err
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE users SET password_hash = ?, password_set_at = ?, must_change_password = ? WHERE id = ?`, hash, time.Now(), mustChange, userID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) SetMustChangePassword(userID int64, mustChange bool) error {

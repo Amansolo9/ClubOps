@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ import (
 func TestUnauthenticatedBudgetAPIRejected(t *testing.T) {
 	app, st := setupApp(t)
 	defer st.Close()
-	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader("period_type=monthly&period_start=2026-03&amount=1000"))
+	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader("period_type=monthly&period_start=2026-03&account_code=acct-1&campus_code=camp-1&project_code=proj-1&amount=1000"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := app.Test(req, 5000)
 	if err != nil {
@@ -44,7 +45,7 @@ func TestAuthenticatedMutationWithoutCSRFRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	auth := login(t, app, "admin", "StrongAdmin123!")
-	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader("period_type=monthly&period_start=2026-03&amount=1000"))
+	req := httptest.NewRequest(http.MethodPost, "/api/budgets", strings.NewReader("period_type=monthly&period_start=2026-03&account_code=acct-1&campus_code=camp-1&project_code=proj-1&amount=1000"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: auth.Session})
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: auth.CSRF})
@@ -227,9 +228,20 @@ func TestExpiredAdminCanRecoverViaChangePasswordPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retryResp.StatusCode != 200 {
+	if retryResp.StatusCode != 302 || retryResp.Header.Get("Location") != "/login" {
 		body, _ := io.ReadAll(retryResp.Body)
-		t.Fatalf("expected admin access restored after password change, got %d body=%s", retryResp.StatusCode, string(body))
+		t.Fatalf("expected stale session redirect to login after password change, got %d location=%q body=%s", retryResp.StatusCode, retryResp.Header.Get("Location"), string(body))
+	}
+	refreshed := login(t, app, "admin", "RecoveredAdmin123!")
+	reauthedReq := httptest.NewRequest(http.MethodGet, "/users", nil)
+	addAuth(reauthedReq, refreshed)
+	reauthedResp, err := app.Test(reauthedReq, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reauthedResp.StatusCode != 200 {
+		body, _ := io.ReadAll(reauthedResp.Body)
+		t.Fatalf("expected admin access restored after re-login, got %d body=%s", reauthedResp.StatusCode, string(body))
 	}
 }
 
@@ -402,5 +414,125 @@ func TestAuditRedactsAuthPayload(t *testing.T) {
 	}
 	if strings.Contains(after, "SecretPassword123!") || strings.Contains(strings.ToLower(after), "password") {
 		t.Fatalf("expected auth payload to be redacted, got: %s", after)
+	}
+}
+
+func TestLoginFailureMessageRemainsGenericAfterLockout(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	authSvc := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, err := authSvc.HashPassword("LockPass12345!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("lock-msg", hash, "member", nil); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		form := url.Values{}
+		form.Set("username", "lock-msg")
+		form.Set("password", "WrongPass123!")
+		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("HX-Request", "true")
+		resp, err := app.Test(req, 5000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != 401 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 401 on failed attempt, got %d body=%s", resp.StatusCode, string(body))
+		}
+	}
+	form := url.Values{}
+	form.Set("username", "lock-msg")
+	form.Set("password", "LockPass12345!")
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 401 {
+		t.Fatalf("expected 401 for locked login, got %d body=%s", resp.StatusCode, string(body))
+	}
+	if msg := strings.TrimSpace(string(body)); msg != "invalid credentials" {
+		t.Fatalf("expected generic login failure message, got %q", msg)
+	}
+}
+
+func TestAdminResetPasswordMissingUserReturnsNotFound(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	adminHash, _ := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute).HashPassword("StrongAdmin123!")
+	if err := st.UpdatePassword(1, adminHash, false); err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "admin", "StrongAdmin123!")
+	form := url.Values{}
+	form.Set("user_id", "999999")
+	form.Set("temp_password", "ResetPass123!")
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/admin-reset", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 404 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404 missing user, got %d body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestAdminResetPasswordRevokesTargetActiveSession(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	authSvc := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	adminHash, err := authSvc.HashPassword("StrongAdmin123!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdatePassword(1, adminHash, false); err != nil {
+		t.Fatal(err)
+	}
+	memberHash, err := authSvc.HashPassword("MemberPassword1!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("reset-session-target", memberHash, "member", nil); err != nil {
+		t.Fatal(err)
+	}
+	targetAuth := login(t, app, "reset-session-target", "MemberPassword1!")
+	target, err := st.FindUserByUsername("reset-session-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminAuth := login(t, app, "admin", "StrongAdmin123!")
+	form := url.Values{}
+	form.Set("user_id", strconv.FormatInt(target.ID, 10))
+	form.Set("temp_password", "ResetPass123!")
+	resetReq := httptest.NewRequest(http.MethodPost, "/api/auth/admin-reset", strings.NewReader(form.Encode()))
+	resetReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addAuth(resetReq, adminAuth)
+	resetResp, err := app.Test(resetReq, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resetResp.StatusCode != 200 {
+		body, _ := io.ReadAll(resetResp.Body)
+		t.Fatalf("expected admin reset success, got %d body=%s", resetResp.StatusCode, string(body))
+	}
+	staleReq := httptest.NewRequest(http.MethodGet, "/users", nil)
+	addAuth(staleReq, targetAuth)
+	staleResp, err := app.Test(staleReq, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staleResp.StatusCode != 302 || staleResp.Header.Get("Location") != "/login" {
+		body, _ := io.ReadAll(staleResp.Body)
+		t.Fatalf("expected stale session redirect to login after reset, got %d location=%q body=%s", staleResp.StatusCode, staleResp.Header.Get("Location"), string(body))
 	}
 }

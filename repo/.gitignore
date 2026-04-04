@@ -8,6 +8,8 @@ static/uploads/*
 static/uploads/avatars/*
 !static/uploads/avatars/.gitkeep
 
+API_tests/static/uploads/**
+
 sessions/
 .tmp/
 

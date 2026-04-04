@@ -3,9 +3,11 @@ package handlers
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"clubops_portal/internal/models"
 
@@ -36,7 +38,14 @@ func (h *Handler) createMember(c *fiber.Ctx) error {
 	if !json.Valid([]byte(custom)) {
 		return apiError(c, fiber.StatusBadRequest, "validation_error", "custom_fields must be valid JSON")
 	}
-	_, err := h.store.InsertMember(models.Member{ClubID: clubID, FullName: c.FormValue("full_name"), EmailEncrypted: h.crypto.Encrypt(c.FormValue("email")), PhoneEncrypted: h.crypto.Encrypt(c.FormValue("phone")), JoinDate: c.FormValue("join_date"), PositionTitle: c.FormValue("position_title"), IsActive: c.FormValue("is_active", "true") == "true", GroupName: c.FormValue("group_name"), CustomFields: h.encryptCustomFields(custom)})
+	fullName := c.FormValue("full_name")
+	email := c.FormValue("email")
+	phone := c.FormValue("phone")
+	joinDate := c.FormValue("join_date")
+	if err := validateMemberCoreFields(fullName, email, phone, joinDate); err != nil {
+		return apiError(c, fiber.StatusUnprocessableEntity, "validation_error", err.Error())
+	}
+	_, err := h.store.InsertMember(models.Member{ClubID: clubID, FullName: fullName, EmailEncrypted: h.crypto.Encrypt(email), PhoneEncrypted: h.crypto.Encrypt(phone), JoinDate: joinDate, PositionTitle: c.FormValue("position_title"), IsActive: c.FormValue("is_active", "true") == "true", GroupName: c.FormValue("group_name"), CustomFields: h.encryptCustomFields(custom)})
 	if err != nil {
 		return h.writeServiceError(c, err)
 	}
@@ -60,10 +69,17 @@ func (h *Handler) updateMember(c *fiber.Ctx) error {
 	if !json.Valid([]byte(custom)) {
 		return apiError(c, fiber.StatusBadRequest, "validation_error", "custom_fields must be valid JSON")
 	}
-	member.FullName = c.FormValue("full_name")
-	member.EmailEncrypted = h.crypto.Encrypt(c.FormValue("email"))
-	member.PhoneEncrypted = h.crypto.Encrypt(c.FormValue("phone"))
-	member.JoinDate = c.FormValue("join_date")
+	fullName := c.FormValue("full_name")
+	email := c.FormValue("email")
+	phone := c.FormValue("phone")
+	joinDate := c.FormValue("join_date")
+	if err := validateMemberCoreFields(fullName, email, phone, joinDate); err != nil {
+		return apiError(c, fiber.StatusUnprocessableEntity, "validation_error", err.Error())
+	}
+	member.FullName = fullName
+	member.EmailEncrypted = h.crypto.Encrypt(email)
+	member.PhoneEncrypted = h.crypto.Encrypt(phone)
+	member.JoinDate = joinDate
 	member.PositionTitle = c.FormValue("position_title")
 	member.IsActive = c.FormValue("is_active", "true") == "true"
 	member.GroupName = c.FormValue("group_name")
@@ -116,6 +132,15 @@ func (h *Handler) exportMembersCSV(c *fiber.Ctx) error {
 		_ = w.Write([]string{strconv.FormatInt(m.ID, 10), m.FullName, email, phone, m.JoinDate, m.PositionTitle, active, m.GroupName, custom})
 	}
 	w.Flush()
+
+	// Audit log: record that a PII export occurred
+	clubScope := "all"
+	if clubID != nil {
+		clubScope = strconv.FormatInt(*clubID, 10)
+	}
+	_ = h.store.InsertAuditLog(&user.ID, "GET", "/api/members/export", "members", clubScope,
+		nil, map[string]any{"action": "csv_export", "row_count": len(members), "club_id": clubScope})
+
 	c.Set("Content-Type", "text/csv")
 	return c.SendString(b.String())
 }
@@ -135,7 +160,18 @@ func (h *Handler) importMembersCSV(c *fiber.Ctx) error {
 	}
 	defer f.Close()
 	r := csv.NewReader(f)
-	rowNum := 0
+	header, err := r.Read()
+	if err != nil {
+		if err == io.EOF {
+			return apiError(c, fiber.StatusBadRequest, "validation_error", "csv empty")
+		}
+		return apiError(c, fiber.StatusBadRequest, "bad_request", "Request could not be processed.")
+	}
+	hasLeadingID, err := validateMemberImportHeader(header)
+	if err != nil {
+		return apiError(c, fiber.StatusUnprocessableEntity, "validation_error", err.Error())
+	}
+	rowNum := 1
 	inserted := 0
 	errorsOut := [][]string{{"row", "error"}}
 	var clubID int64
@@ -160,15 +196,16 @@ func (h *Handler) importMembersCSV(c *fiber.Ctx) error {
 			return apiError(c, fiber.StatusBadRequest, "bad_request", "Request could not be processed.")
 		}
 		rowNum++
-		if rowNum == 1 {
-			continue
-		}
 		if rowNum > 5001 {
 			errorsOut = append(errorsOut, []string{strconv.Itoa(rowNum), "row limit exceeded (5000)"})
 			break
 		}
-		memberRow, err := parseMemberImportRow(row)
+		memberRow, err := parseMemberImportRow(row, hasLeadingID)
 		if err != nil {
+			errorsOut = append(errorsOut, []string{strconv.Itoa(rowNum), err.Error()})
+			continue
+		}
+		if err := validateMemberCoreFields(memberRow[0], memberRow[1], memberRow[2], memberRow[3]); err != nil {
 			errorsOut = append(errorsOut, []string{strconv.Itoa(rowNum), err.Error()})
 			continue
 		}
@@ -188,7 +225,7 @@ func (h *Handler) importMembersCSV(c *fiber.Ctx) error {
 		}
 		inserted++
 	}
-	if rowNum <= 1 {
+	if rowNum == 1 {
 		return apiError(c, fiber.StatusBadRequest, "validation_error", "csv empty")
 	}
 	if len(errorsOut) > 1 {
@@ -211,4 +248,23 @@ func (h *Handler) importMembersCSV(c *fiber.Ctx) error {
 		return c.Status(422).SendString(reportCSV)
 	}
 	return c.SendString("members imported: " + strconv.Itoa(inserted))
+}
+
+func validateMemberCoreFields(fullName, email, phone, joinDate string) error {
+	if strings.TrimSpace(fullName) == "" {
+		return errors.New("full_name required")
+	}
+	if strings.TrimSpace(email) == "" {
+		return errors.New("email required")
+	}
+	if strings.TrimSpace(phone) == "" {
+		return errors.New("phone required")
+	}
+	if strings.TrimSpace(joinDate) == "" {
+		return errors.New("join_date required")
+	}
+	if _, err := time.Parse("2006-01-02", strings.TrimSpace(joinDate)); err != nil {
+		return errors.New("join_date must be YYYY-MM-DD")
+	}
+	return nil
 }

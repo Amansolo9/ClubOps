@@ -1,6 +1,7 @@
 package unit_tests
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,24 @@ func TestAuthLockoutAfterFiveAttempts(t *testing.T) {
 	}
 	if u.LockedUntil == nil || u.LockedUntil.Before(time.Now()) {
 		t.Fatalf("expected account to be locked")
+	}
+}
+
+func TestAuthLockedLoginReturnsGenericFailure(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	auth := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, _ := auth.HashPassword("secret123456")
+	if err := st.CreateUser("locked-generic", hash, "organizer", nil); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		_, _, _ = auth.Login("locked-generic", "bad-pass")
+	}
+	if _, _, err := auth.Login("locked-generic", "secret123456"); err == nil {
+		t.Fatalf("expected locked account to reject login")
+	} else if !strings.EqualFold(strings.TrimSpace(err.Error()), "invalid credentials") {
+		t.Fatalf("expected generic invalid credentials message, got %q", err.Error())
 	}
 }
 
@@ -151,5 +170,80 @@ func TestExpiredSessionRejected(t *testing.T) {
 	}
 	if _, err := auth.CurrentUserByToken(token); err == nil {
 		t.Fatalf("expected expired session rejection")
+	}
+}
+
+func TestPasswordChangeRevokesActiveSessions(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	auth := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, _ := auth.HashPassword("change-pass-123")
+	if err := st.CreateUser("change-owner", hash, "member", nil); err != nil {
+		t.Fatal(err)
+	}
+	token, user, err := auth.Login("change-owner", "change-pass-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.ChangePassword(user.ID, "change-pass-456"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.CurrentUserByToken(token); err == nil {
+		t.Fatalf("expected session revocation after password change")
+	}
+}
+
+func TestAdminResetRevokesTargetSessions(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	auth := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, _ := auth.HashPassword("reset-pass-123")
+	if err := st.CreateUser("reset-target", hash, "member", nil); err != nil {
+		t.Fatal(err)
+	}
+	token, user, err := auth.Login("reset-target", "reset-pass-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.AdminResetPassword(user.ID, "temp-reset-789"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.CurrentUserByToken(token); err == nil {
+		t.Fatalf("expected session revocation after admin reset")
+	}
+}
+
+func TestAuthStateTransitionsAreAudited(t *testing.T) {
+	st := setupStore(t)
+	defer st.Close()
+	auth := services.NewAuthService(st, 30*time.Minute, 1, 15*time.Minute)
+	hash, _ := auth.HashPassword("audit-pass-123")
+	if err := st.CreateUser("audit-user", hash, "member", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := auth.Login("audit-user", "wrong-pass"); err == nil {
+		t.Fatalf("expected invalid credentials")
+	}
+	if _, _, err := auth.Login("audit-user", "audit-pass-123"); err == nil {
+		t.Fatalf("expected lock to still block login")
+	}
+	u, err := st.FindUserByUsername("audit-user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.AdminResetPassword(u.ID, "audit-pass-456"); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.ChangePassword(u.ID, "audit-pass-789"); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/auth/login-lock-state", "/auth/admin-reset-password", "/auth/change-password"} {
+		var count int
+		if err := st.DB.QueryRow(`SELECT COUNT(1) FROM audit_logs WHERE path = ?`, path).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count == 0 {
+			t.Fatalf("expected audit log for %s", path)
+		}
 	}
 }

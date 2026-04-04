@@ -25,18 +25,47 @@ func splitClean(raw string) []string {
 	return out
 }
 
-func parseMemberImportRow(row []string) ([]string, error) {
-	if len(row) >= 9 {
+func parseMemberImportRow(row []string, hasLeadingID bool) ([]string, error) {
+	if hasLeadingID {
+		if len(row) != 9 {
+			return nil, errors.New("row must contain exactly 9 columns for export-shaped csv")
+		}
 		trimmed := make([]string, 8)
 		copy(trimmed, row[1:9])
 		return trimmed, nil
 	}
-	if len(row) >= 8 {
-		trimmed := make([]string, 8)
-		copy(trimmed, row[:8])
-		return trimmed, nil
+	if len(row) != 8 {
+		return nil, errors.New("row must contain exactly 8 columns")
 	}
-	return nil, errors.New("requires full_name,email,phone,join_date,position_title,is_active,group_name,custom_fields (optional leading id allowed)")
+	trimmed := make([]string, 8)
+	copy(trimmed, row[:8])
+	return trimmed, nil
+}
+
+func validateMemberImportHeader(header []string) (bool, error) {
+	normalized := make([]string, len(header))
+	for i := range header {
+		normalized[i] = strings.ToLower(strings.TrimSpace(header[i]))
+	}
+	plain := []string{"full_name", "email", "phone", "join_date", "position_title", "is_active", "group_name", "custom_fields"}
+	withID := []string{"id", "full_name", "email", "phone", "join_date", "position_title", "is_active", "group_name", "custom_fields"}
+	if len(normalized) == len(plain) {
+		for i := range plain {
+			if normalized[i] != plain[i] {
+				return false, errors.New("csv header must match full_name,email,phone,join_date,position_title,is_active,group_name,custom_fields or id-prefixed export schema")
+			}
+		}
+		return false, nil
+	}
+	if len(normalized) == len(withID) {
+		for i := range withID {
+			if normalized[i] != withID[i] {
+				return false, errors.New("csv header must match full_name,email,phone,join_date,position_title,is_active,group_name,custom_fields or id-prefixed export schema")
+			}
+		}
+		return true, nil
+	}
+	return false, errors.New("csv header must match full_name,email,phone,join_date,position_title,is_active,group_name,custom_fields or id-prefixed export schema")
 }
 
 func imagesFromJSON(raw string) []string {

@@ -1,7 +1,9 @@
 package API_tests
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -173,5 +175,45 @@ func TestUsersPageIncludesAdminResetForm(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 || !strings.Contains(string(body), "/api/auth/admin-reset") {
 		t.Fatalf("expected users page to include admin reset form, got %d body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestClubProfileAvatarRejectsMismatchedImageContent(t *testing.T) {
+	app, st := setupApp(t)
+	defer st.Close()
+	authSvc := services.NewAuthService(st, 30*time.Minute, 5, 15*time.Minute)
+	hash, err := authSvc.HashPassword("LeadPass12345!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser("lead-avatar", hash, "team_lead", int64Ptr(1)); err != nil {
+		t.Fatal(err)
+	}
+	auth := login(t, app, "lead-avatar", "LeadPass12345!")
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	if err := writer.WriteField("name", "Default Club"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := writer.CreateFormFile("avatar", "avatar.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("not-a-jpeg")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/clubs/1/profile", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	addAuth(req, auth)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 422 {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 422 invalid avatar content, got %d body=%s", resp.StatusCode, string(respBody))
 	}
 }

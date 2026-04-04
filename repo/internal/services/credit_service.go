@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"clubops_portal/internal/models"
@@ -17,9 +19,9 @@ type CreditService struct {
 }
 
 type CreditFormula struct {
-	Weight       float64 `json:"weight"`
-	MakeupBonus  float64 `json:"makeup_bonus"`
-	RetakeFactor float64 `json:"retake_factor"`
+	Weight       float64           `json:"weight"`
+	MakeupBonus  float64           `json:"makeup_bonus"`
+	RetakeFactor float64           `json:"retake_factor"`
 	Thresholds   []CreditThreshold `json:"thresholds"`
 	Deductions   []CreditDeduction `json:"deductions"`
 }
@@ -53,9 +55,20 @@ func (s *CreditService) CreateRule(version string, formula CreditFormula, makeup
 	})
 }
 
-func (s *CreditService) IssueCredit(memberID int64, baseScore float64, makeupUsed bool, retakeUsed bool, txnDate string) (int64, float64, error) {
+func (s *CreditService) IssueCredit(memberID int64, baseScore float64, makeupUsed bool, retakeUsed bool, txnDate, txnRef, source string) (int64, float64, error) {
 	if baseScore < 0 {
 		return 0, 0, errors.New("base_score cannot be negative")
+	}
+	if _, err := time.Parse("2006-01-02", txnDate); err != nil {
+		return 0, 0, errors.New("txn_date must be YYYY-MM-DD")
+	}
+	txnRef = strings.TrimSpace(txnRef)
+	if txnRef == "" {
+		txnRef = "auto-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = "manual"
 	}
 	rule, err := s.store.GetCreditRuleForDate(txnDate)
 	if err != nil {
@@ -91,11 +104,14 @@ func (s *CreditService) IssueCredit(memberID int64, baseScore float64, makeupUse
 			credit -= d.Amount
 		}
 	}
-	checksum := sha256.Sum256([]byte(fmt.Sprintf("%d:%d:%0.3f:%v:%v", memberID, rule.ID, credit, makeupUsed, retakeUsed)))
+	checksum := sha256.Sum256([]byte(fmt.Sprintf("%d:%d:%s:%s:%s:%0.3f:%v:%v", memberID, rule.ID, txnDate, txnRef, source, credit, makeupUsed, retakeUsed)))
 	immutable := hex.EncodeToString(checksum[:])
 	id, err := s.store.InsertIssuedCredit(models.CreditIssued{
 		MemberID:         memberID,
 		RuleVersionID:    rule.ID,
+		TxnDate:          txnDate,
+		TxnRef:           txnRef,
+		Source:           source,
 		BaseScore:        baseScore,
 		MakeupUsed:       makeupUsed,
 		RetakeUsed:       retakeUsed,

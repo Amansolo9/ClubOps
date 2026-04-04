@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -64,9 +65,11 @@ func (s *AuthService) Login(username, password string) (string, *models.User, er
 	}
 	now := s.now()
 	if u.LockedUntil != nil && u.LockedUntil.After(now) {
-		return "", nil, errors.New("account locked, try later")
+		log.Printf("auth_login_locked username=%s user_id=%d locked_until=%s", u.Username, u.ID, u.LockedUntil.UTC().Format(time.RFC3339))
+		return "", nil, errors.New("invalid credentials")
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
+		before := map[string]any{"failed_attempts": u.FailedAttempts, "locked_until": lockUntilForAudit(u.LockedUntil)}
 		attempts := u.FailedAttempts + 1
 		var until *time.Time
 		if attempts >= s.maxAttempts {
@@ -75,12 +78,22 @@ func (s *AuthService) Login(username, password string) (string, *models.User, er
 			attempts = 0
 		}
 		_ = s.store.UpdateUserLockState(u.ID, attempts, until)
+		after := map[string]any{"failed_attempts": attempts, "locked_until": lockUntilForAudit(until)}
+		s.auditUserTransition(u.ID, "POST", "/auth/login-lock-state", before, after)
 		return "", nil, errors.New("invalid credentials")
+	}
+	if u.FailedAttempts != 0 || u.LockedUntil != nil {
+		before := map[string]any{"failed_attempts": u.FailedAttempts, "locked_until": lockUntilForAudit(u.LockedUntil)}
+		after := map[string]any{"failed_attempts": 0, "locked_until": nil}
+		s.auditUserTransition(u.ID, "POST", "/auth/login-unlock-state", before, after)
 	}
 	_ = s.store.UpdateUserLockState(u.ID, 0, nil)
 	if u.Role == "admin" && now.Sub(u.PasswordSetAt) > 180*24*time.Hour {
+		before := map[string]any{"must_change_password": u.MustChangePass}
 		_ = s.store.SetMustChangePassword(u.ID, true)
 		u.MustChangePass = true
+		after := map[string]any{"must_change_password": true}
+		s.auditUserTransition(u.ID, "POST", "/auth/must-change-password", before, after)
 	}
 	token, err := randomToken(32)
 	if err != nil {
@@ -132,7 +145,17 @@ func (s *AuthService) ChangePassword(userID int64, newPassword string) error {
 	if err != nil {
 		return err
 	}
-	return s.store.UpdatePassword(userID, hash, false)
+	before, _ := s.store.FindUserByID(userID)
+	if err := s.store.UpdatePassword(userID, hash, false); err != nil {
+		return err
+	}
+	beforeState := map[string]any{}
+	if before != nil {
+		beforeState["must_change_password"] = before.MustChangePass
+	}
+	afterState := map[string]any{"must_change_password": false, "sessions_revoked": true}
+	s.auditUserTransition(userID, "POST", "/auth/change-password", beforeState, afterState)
+	return nil
 }
 
 func (s *AuthService) AdminResetPassword(targetUserID int64, tempPassword string) error {
@@ -140,5 +163,27 @@ func (s *AuthService) AdminResetPassword(targetUserID int64, tempPassword string
 	if err != nil {
 		return err
 	}
-	return s.store.UpdatePassword(targetUserID, hash, true)
+	before, _ := s.store.FindUserByID(targetUserID)
+	if err := s.store.UpdatePassword(targetUserID, hash, true); err != nil {
+		return err
+	}
+	beforeState := map[string]any{}
+	if before != nil {
+		beforeState["must_change_password"] = before.MustChangePass
+	}
+	afterState := map[string]any{"must_change_password": true, "sessions_revoked": true}
+	s.auditUserTransition(targetUserID, "POST", "/auth/admin-reset-password", beforeState, afterState)
+	return nil
+}
+
+func (s *AuthService) auditUserTransition(userID int64, method, path string, before, after map[string]any) {
+	entityID := strconv.FormatInt(userID, 10)
+	_ = s.store.InsertAuditLog(nil, method, path, "users", entityID, before, after)
+}
+
+func lockUntilForAudit(v *time.Time) any {
+	if v == nil {
+		return nil
+	}
+	return v.UTC().Format(time.RFC3339)
 }

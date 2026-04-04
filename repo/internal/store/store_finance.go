@@ -121,8 +121,28 @@ func (s *SQLiteStore) ApproveBudgetChange(changeID, adminID int64, approve bool)
 
 	var budgetID int64
 	var amount float64
-	if err := tx.QueryRow(`SELECT budget_id, proposed_amount FROM budget_change_requests WHERE id = ? AND status = 'pending'`, changeID).Scan(&budgetID, &amount); err != nil {
+	var requesterID int64
+	var requesterRole string
+	var reviewerRole string
+	if err := tx.QueryRow(`SELECT bcr.budget_id, bcr.proposed_amount, bcr.requested_by, requester.role, reviewer.role
+		FROM budget_change_requests bcr
+		JOIN users requester ON requester.id = bcr.requested_by
+		JOIN users reviewer ON reviewer.id = ?
+		WHERE bcr.id = ? AND bcr.status = 'pending'`, adminID, changeID).Scan(&budgetID, &amount, &requesterID, &requesterRole, &reviewerRole); err != nil {
 		return err
+	}
+	if requesterID == adminID {
+		return errors.New("reviewer must differ from requester")
+	}
+	// Cross-role approval: organizer <-> admin
+	if requesterRole == "organizer" && reviewerRole != "admin" {
+		return errors.New("organizer requests must be reviewed by admin")
+	}
+	if requesterRole == "admin" && reviewerRole != "organizer" {
+		return errors.New("admin requests must be reviewed by organizer")
+	}
+	if requesterRole != "organizer" && requesterRole != "admin" {
+		return errors.New("requester must be organizer or admin")
 	}
 	status := "rejected"
 	if approve {
