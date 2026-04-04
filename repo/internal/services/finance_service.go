@@ -94,8 +94,8 @@ func (s *FinanceService) RequestBudgetChange(budgetID, requesterID int64, propos
 		}
 		return 0, nil
 	}
-	if requesterRole != "organizer" && requesterRole != "admin" {
-		return 0, errors.New("requester must be organizer or admin for >10% changes")
+	if requesterRole != "organizer" {
+		return 0, errors.New("requester must be organizer for >10% changes")
 	}
 	return s.store.InsertBudgetChangeRequest(models.BudgetChangeRequest{
 		BudgetID:       budgetID,
